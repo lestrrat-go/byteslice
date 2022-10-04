@@ -106,6 +106,9 @@ func (t *Type) String() string {
 // whose type is not known before hand
 func (t *Type) AcceptValue(in interface{}) error {
 	switch in := in.(type) {
+	case []byte:
+		t.setBytesNoLock(in)
+		return nil
 	case string:
 		buf, err := t.b64DecoderNoLock().DecodeString(in)
 		if err != nil {
@@ -122,7 +125,10 @@ func (t *Type) AcceptValue(in interface{}) error {
 func (t *Type) SetBytes(data []byte) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.setBytesNoLock(data)
+}
 
+func (t *Type) setBytesNoLock(data []byte) {
 	l := len(data)
 	if cap(t.data) < l {
 		t.data = make([]byte, l)
