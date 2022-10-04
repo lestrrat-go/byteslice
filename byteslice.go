@@ -145,6 +145,9 @@ func (t *Type) setBytesNoLock(data []byte) {
 
 // Len returns the length of the internal `[]byte` buffer
 func (t *Type) Len() int {
+	if t == nil {
+		return 0
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return len(t.data)
