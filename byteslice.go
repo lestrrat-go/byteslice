@@ -24,6 +24,10 @@ type Type struct {
 	encoder Base64Encoder
 }
 
+func New() *Type {
+	return &Type{}
+}
+
 // B64Decoder returns the Base64Decoder associated with this object.
 // If uninitialized, will use the global decoder via byteslice.GlobalB64Decoder()
 func (t *Type) B64Decoder() Base64Decoder {
