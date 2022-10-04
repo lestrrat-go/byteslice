@@ -129,3 +129,10 @@ func (t *Type) SetBytes(data []byte) {
 	}
 	copy(t.data, data)
 }
+
+// Len returns the length of the internal `[]byte` buffer
+func (t *Type) Len() int {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return len(t.data)
+}
