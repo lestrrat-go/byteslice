@@ -78,11 +78,9 @@ func (t *Type) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf(`failed to unmarshal data to byteslice.Type: %w`, err)
 	}
 
-	buf, err := t.b64DecoderNoLock().DecodeString(raw)
-	if err != nil {
-		return fmt.Errorf(`failed to base64 decode unmarshaled data  for byteslice.Type: %w`, err)
+	if err := t.AcceptValue(raw); err != nil {
+		return fmt.Errorf(`failed to accept unmarshaled data: %w`, err)
 	}
-	t.data = buf
 	return nil
 }
 
@@ -104,9 +102,30 @@ func (t *Type) String() string {
 	return string(t.Bytes())
 }
 
+// AcceptValue is used in by some consumers to assign the value
+// whose type is not known before hand
+func (t *Type) AcceptValue(in interface{}) error {
+	switch in := in.(type) {
+	case string:
+		buf, err := t.b64DecoderNoLock().DecodeString(in)
+		if err != nil {
+			return fmt.Errorf(`failed to accept value for byteslice.Type: %w`, err)
+		}
+		t.data = buf
+		return nil
+	default:
+		return fmt.Errorf(`failed to accept value for byteslice.Type: can't handle type %T`, in)
+	}
+}
+
+// SetBytes copies the `data` byte slice to the internal buffer
 func (t *Type) SetBytes(data []byte) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.data = data
+	l := len(data)
+	if cap(t.data) < l {
+		t.data = make([]byte, l)
+	}
+	copy(t.data, data)
 }
