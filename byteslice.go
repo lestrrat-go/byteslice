@@ -97,6 +97,9 @@ func (t Type) MarshalJSON() ([]byte, error) {
 }
 
 func (t *Type) Bytes() []byte {
+	if t == nil {
+		return nil
+	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.data
