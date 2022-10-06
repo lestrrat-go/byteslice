@@ -28,6 +28,10 @@ func New() *Type {
 	return &Type{}
 }
 
+func From(data []byte) *Type {
+	return &Type{data: data}
+}
+
 // B64Decoder returns the Base64Decoder associated with this object.
 // If uninitialized, will use the global decoder via byteslice.GlobalB64Decoder()
 func (t *Type) B64Decoder() Base64Decoder {
