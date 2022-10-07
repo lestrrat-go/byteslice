@@ -31,16 +31,17 @@ type Buffer struct {
 	encoder B64Encoder
 }
 
-// New creates a new buffer. Using the data provided as the initial buffer.
-// This is different from using `SetBytes`, which copies the values onto
-// the internal buffer.
-//
+// New creates a new buffer. Using the data provided to call SetBytes().
 // You may pass `nil` to the argument to create an uninitialized `Buffer` object.
 //
 // If you do not need explicit initialization, it is safe to use the
 // zero value of the `Buffer` object.
 func New(data []byte) *Buffer {
-	return &Buffer{data: data}
+	b := &Buffer{}
+	if data != nil {
+		b.SetBytes(data)
+	}
+	return b
 }
 
 // B64Decoder returns the B64Decoder associated with this object.
