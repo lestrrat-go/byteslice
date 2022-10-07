@@ -14,18 +14,18 @@ package byteslice
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 )
 
 // Buffer represents a byte slice. Its only purpose is to act
 // as a thing layer on top of a `[]byte` and provide flexibly
 // JSON serialization/deserialization capabilities
 //
-// It is safe to use the zero value of the `Buffer` object.
+// It is safe to use the zero value of the `Buffer` object,
+// but the object is not explicitly synchronized. The user
+// must make sure to apply any synchronization if need be.
 //
 // You should not copy a `Buffer` object by reference
 type Buffer struct {
-	mu      sync.RWMutex
 	data    []byte
 	decoder B64Decoder
 	encoder B64Encoder
@@ -46,12 +46,6 @@ func New(data []byte) *Buffer {
 // B64Decoder returns the B64Decoder associated with this object.
 // If uninitialized, it will use the global decoder via byteslice.GlobalB64Decoder()
 func (b *Buffer) B64Decoder() B64Decoder {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.b64DecoderNoLock()
-}
-
-func (b *Buffer) b64DecoderNoLock() B64Decoder {
 	if b.decoder != nil {
 		return b.decoder
 	}
@@ -60,8 +54,6 @@ func (b *Buffer) b64DecoderNoLock() B64Decoder {
 
 // SetB64Decoder assigns a B64Decoder for this object.
 func (b *Buffer) SetB64Decoder(dec B64Decoder) *Buffer {
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.decoder = dec
 	return b
 }
@@ -69,12 +61,6 @@ func (b *Buffer) SetB64Decoder(dec B64Decoder) *Buffer {
 // B64Encoder returns the B64Encoder associated with this object.
 // If uninitialized, will use the global decoder via byteslice.GlobalB64Encoder()
 func (b *Buffer) B64Encoder() B64Encoder {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.b64EncoderNoLock()
-}
-
-func (b *Buffer) b64EncoderNoLock() B64Encoder {
 	if b.encoder != nil {
 		return b.encoder
 	}
@@ -83,8 +69,6 @@ func (b *Buffer) b64EncoderNoLock() B64Encoder {
 
 // SetB64Encoder assigns a B64Encoder for this object.
 func (b *Buffer) SetEncoder(enc B64Encoder) *Buffer {
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.encoder = enc
 	return b
 }
@@ -99,22 +83,20 @@ func (b *Buffer) UnmarshalJSON(data []byte) error {
 	if b == nil {
 		return fmt.Errorf(`nil byteslice.Buffer`)
 	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
 
 	var raw string
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return fmt.Errorf(`failed to unmarshal data to byteslice.Buffer: %w`, err)
 	}
 
-	if err := b.decodeAndSetStringNoLock(raw); err != nil {
+	if err := b.decodeAndSetString(raw); err != nil {
 		return fmt.Errorf(`failed to accept unmarshaled data: %w`, err)
 	}
 	return nil
 }
 
-func (b *Buffer) decodeAndSetStringNoLock(in string) error {
-	buf, err := b.b64DecoderNoLock().DecodeString(in)
+func (b *Buffer) decodeAndSetString(in string) error {
+	buf, err := b.B64Decoder().DecodeString(in)
 	if err != nil {
 		return fmt.Errorf(`failed to decode string for byteslice.Buffer: %w`, err)
 	}
@@ -129,7 +111,7 @@ func (b *Buffer) decodeAndSetStringNoLock(in string) error {
 // The JSON string will be parsed using the B64Encoder object associated
 // with this object (or the global one, if not specified).
 func (b Buffer) MarshalJSON() ([]byte, error) {
-	return json.Marshal(b.b64EncoderNoLock().EncodeToString(b.data))
+	return json.Marshal(b.B64Encoder().EncodeToString(b.data))
 }
 
 // Bytes returns the raw bytes stored in the `Buffer` object.
@@ -141,8 +123,6 @@ func (b *Buffer) Bytes() []byte {
 	if b == nil {
 		return nil
 	}
-	b.mu.RLock()
-	defer b.mu.RUnlock()
 	return b.data
 }
 
@@ -161,17 +141,15 @@ func (b *Buffer) Bytes() []byte {
 // string. Unlike in the case of `UnmarshalJSON`, the string does not need
 // to be quoted.
 func (b *Buffer) AcceptValue(in interface{}) error {
-	b.mu.Lock()
-	defer b.mu.Lock()
 	switch in := in.(type) {
 	case *Buffer:
-		b.setBytesNoLock(in.Bytes())
+		b.SetBytes(in.Bytes())
 		return nil
 	case []byte:
-		b.setBytesNoLock(in)
+		b.SetBytes(in)
 		return nil
 	case string:
-		if err := b.decodeAndSetStringNoLock(in); err != nil {
+		if err := b.decodeAndSetString(in); err != nil {
 			return fmt.Errorf(`failed to accept value for byteslice.Buffer: %w`, err)
 		}
 		return nil
@@ -182,12 +160,6 @@ func (b *Buffer) AcceptValue(in interface{}) error {
 
 // SetBytes copies the `data` byte slice to the internal buffer
 func (b *Buffer) SetBytes(data []byte) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.setBytesNoLock(data)
-}
-
-func (b *Buffer) setBytesNoLock(data []byte) {
 	l := len(data)
 	if cap(b.data) < l {
 		b.data = make([]byte, l)
@@ -200,7 +172,5 @@ func (b *Buffer) Len() int {
 	if b == nil {
 		return 0
 	}
-	b.mu.RLock()
-	defer b.mu.RUnlock()
 	return len(b.data)
 }
