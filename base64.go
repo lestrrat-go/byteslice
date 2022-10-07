@@ -1,105 +1,103 @@
 package byteslice
 
 import (
-	"bytes"
 	"encoding/base64"
-	"fmt"
+	"strings"
 	"sync"
 )
 
-// Base64Decoder is the interface for objects that can decode
+// B64Decoder is the interface for objects that can decode
 // base64 encoded strings into `[]byte`
-type Base64Decoder interface {
+//
+// Any `*base64.Encoding` object satisfies this interface.
+type B64Decoder interface {
 	DecodeString(string) ([]byte, error)
 }
 
-// Base64Encoder is the interface for objects that can encode
+// B64Encoder is the interface for objects that can encode
 // `[]byte` into base64 encoded string
-type Base64Encoder interface {
-	EncodeToString([]byte) (string, error)
+//
+// Any `*base64.Encoding` object satisfies this interface.
+type B64Encoder interface {
+	EncodeToString([]byte) string
 }
 
 var globalMu sync.RWMutex
-var globalDecoder Base64Decoder
-var globalEncoder Base64Encoder
+var globalDecoder B64Decoder
+var globalEncoder B64Encoder
 
-func SetGlobalB64Decoder(dec Base64Decoder) {
+// SetGlobalB64Decoder sets the `B64Decoder` that should be used globally
+func SetGlobalB64Decoder(dec B64Decoder) {
 	globalMu.Lock()
 	defer globalMu.Unlock()
 
 	globalDecoder = dec
 }
 
-func SetGlobalB64Encoder(enc Base64Encoder) {
+// SetGlobalB64Encoder sets the `B64Encoder` that should be used globally
+func SetGlobalB64Encoder(enc B64Encoder) {
 	globalMu.Lock()
 	defer globalMu.Unlock()
 
 	globalEncoder = enc
 }
 
-func GlobalB64Decoder() Base64Decoder {
+// GlobalB64Decoder returns the `B64Decoder` that is to be used by default
+// for all `byteslice.Buffer` types. Each instance can be configured to
+// use its own decoder if set individually.
+//
+// The default decoder uses heuristics to determine which of the `"encoding/base64".Encoding`
+// objects should be used.
+//
+//   - If the incoming payload does NOT contain a '=' at the end of the string, it is considered to be a "raw" base64 encoding (i.e. no padding)
+//   - If the incoming payload does NOT contain either '+' or '/', it is considered to be a "url" encoding
+//
+// By combining these two, we decide which of `base64.URLEncoding`, `base64.StdEncoding`,
+// `base64.RawURLEncoding`, or `base64.RawStdEncoding` we should be using to
+// decode the JSON string
+func GlobalB64Decoder() B64Decoder {
 	globalMu.RLock()
 	defer globalMu.RUnlock()
 
 	return globalDecoder
 }
 
-func GlobalB64Encoder() Base64Encoder {
+// GlobalB64Encoder returns the `B64Encoder` that is to be used by default
+// for all `byteslice.Buffer` types. Each instance can be configured to
+// use its own encoder if set individually.
+//
+// The default encoder uses the same encoder as the standard library's
+// "encoding/json", which is the `base64.StdEncoding`
+func GlobalB64Encoder() B64Encoder {
 	globalMu.RLock()
 	defer globalMu.RUnlock()
 
 	return globalEncoder
 }
 
+// B64DecoderFunc is an instance of B64Decoder that is based on
+// a function.
 type B64DecoderFunc func(string) ([]byte, error)
 
+// DecodeString implements the B64Decoder interface
 func (f B64DecoderFunc) DecodeString(s string) ([]byte, error) {
 	return f(s)
 }
 
-type B64EncoderFunc func([]byte) (string, error)
+// B64EncoderFunc is an instance of B64Encoder that is based on
+// a function.
+type B64EncoderFunc func([]byte) string
 
-func (f B64EncoderFunc) EncodeToString(data []byte) (string, error) {
+// EncodeString implements the B64Encoder interface
+func (f B64EncoderFunc) EncodeToString(data []byte) string {
 	return f(data)
 }
 
-var DefaultB64Decoder Base64Decoder = B64DecoderFunc(defaultDecodeString)
-var RawURLDecoder Base64Decoder = B64DecoderFunc(func(src string) ([]byte, error) {
-	return base64.RawURLEncoding.DecodeString(src)
-})
-var URLDecoder Base64Decoder = B64DecoderFunc(func(src string) ([]byte, error) {
-	return base64.URLEncoding.DecodeString(src)
-})
-var RawStdDecoder Base64Decoder = B64DecoderFunc(func(src string) ([]byte, error) {
-	return base64.RawStdEncoding.DecodeString(src)
-})
-var StdDecoder Base64Decoder = B64DecoderFunc(func(src string) ([]byte, error) {
-	return base64.StdEncoding.DecodeString(src)
-})
-
-var DefaultB64Encoder Base64Encoder = RawURLEncoder
-var RawURLEncoder Base64Encoder = B64EncoderFunc(func(src []byte) (string, error) {
-	return base64.RawURLEncoding.EncodeToString(src), nil
-})
-var URLEncoder Base64Encoder = B64EncoderFunc(func(src []byte) (string, error) {
-	return base64.URLEncoding.EncodeToString(src), nil
-})
-var RawStdEncoder Base64Encoder = B64EncoderFunc(func(src []byte) (string, error) {
-	return base64.RawStdEncoding.EncodeToString(src), nil
-})
-var StdEncoder Base64Encoder = B64EncoderFunc(func(src []byte) (string, error) {
-	return base64.StdEncoding.EncodeToString(src), nil
-})
-
 func defaultDecodeString(src string) ([]byte, error) {
-	return defaultDecode([]byte(src))
-}
-
-func defaultDecode(src []byte) ([]byte, error) {
 	var enc *base64.Encoding
 
-	var isRaw = !bytes.HasSuffix(src, []byte{'='})
-	var isURL = !bytes.ContainsAny(src, "+/")
+	var isRaw = !strings.HasSuffix(src, "=")
+	var isURL = !strings.ContainsAny(src, "+/")
 	switch {
 	case isRaw && isURL:
 		enc = base64.RawURLEncoding
@@ -111,15 +109,10 @@ func defaultDecode(src []byte) ([]byte, error) {
 		enc = base64.StdEncoding
 	}
 
-	dst := make([]byte, enc.DecodedLen(len(src)))
-	n, err := enc.Decode(dst, src)
-	if err != nil {
-		return nil, fmt.Errorf(`failed to decode source: %w`, err)
-	}
-	return dst[:n], nil
+	return enc.DecodeString(src)
 }
 
 func init() {
-	SetGlobalB64Decoder(DefaultB64Decoder)
-	SetGlobalB64Encoder(DefaultB64Encoder)
+	SetGlobalB64Decoder(B64DecoderFunc(defaultDecodeString))
+	SetGlobalB64Encoder(base64.StdEncoding)
 }
