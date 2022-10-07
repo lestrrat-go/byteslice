@@ -1,4 +1,4 @@
-byteslice
+byteslice ![](https://github.com/lestrrat-go/byteslice/workflows/CI/badge.svg) [![Go Reference](https://pkg.go.dev/badge/github.com/lestrrat-go/byteslice.svg)](https://pkg.go.dev/github.com/lestrrat-go/byteslice)
 =========
 
 A thin layer on top of `[]byte` to accomodate base64 encoding used in conjunction
