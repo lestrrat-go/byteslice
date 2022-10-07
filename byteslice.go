@@ -163,6 +163,8 @@ func (b *Buffer) SetBytes(data []byte) {
 	l := len(data)
 	if cap(b.data) < l {
 		b.data = make([]byte, l)
+	} else {
+		b.data = b.data[:l]
 	}
 	copy(b.data, data)
 }
